@@ -65,6 +65,7 @@ export class BestHack {
                             server.data.hasAdminRights &&
                             server.maxMoney > 0 &&
                             ns.formulas.hacking.weakenTime(server.data, player) < maxWeakenTime)
+      return filtered
       
     } else {
       let filtered = Object.values(scores)
@@ -72,8 +73,8 @@ export class BestHack {
                             server.data.hasAdminRights &&
                             server.maxMoney > 0 &&
                             calculateWeakenTime(server.data, player) < maxWeakenTime)
+      return filtered
     }
-    return filtered
   }
 
   calcServerScores() {
