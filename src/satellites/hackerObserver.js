@@ -149,7 +149,7 @@ async function findThreadsAndRun(ns, nmap, file, numThreads, target, wait = 0, r
  **/
 async function hackInfo(ns, target) {
   const player = fetchPlayer()
-  let time = ns.formulas.hacking.hackTime(target.data, player) + bufferTime*2
+  let time = ns.getHackTime(target.name) + bufferTime*2
   let amountToHack = target.data.moneyAvailable * hackDecimal
   let threads = Math.floor(await fetch(ns, `ns.hackAnalyzeThreads('${target.name}', ${amountToHack})`))
   if ( threads == -1 ) {
@@ -170,7 +170,7 @@ async function hackInfo(ns, target) {
  **/
 async function growthInfo(ns, target, amountHacked) {
   const player = fetchPlayer()
-  let time = ns.formulas.hacking.growTime(target.data, player) + bufferTime
+  let time = ns.getGrowTime(target.name) + bufferTime
   let multiplier = target.maxMoney/(Math.max(1.1, target.data.moneyAvailable - amountHacked))
   let threads = Math.ceil(await fetch(ns, `ns.growthAnalyze('${target.name}',${multiplier})`))
   let security = await fetch(ns,`ns.growthAnalyzeSecurity(${threads})`)
@@ -187,7 +187,7 @@ async function growthInfo(ns, target, amountHacked) {
  **/
 async function weakenInfo(ns, target) {
   const player = fetchPlayer()
-  let time = ns.formulas.hacking.weakenTime(target.data, player)
+  let time = ns.getWeakenTime(target.name)
   const security = target.security - target.minSecurity
   let threads = Math.ceil(security/weakenAnlz)
   ns.print(`Weak time: ${formatDuration(time)} sec to decrease: ${security}`)
