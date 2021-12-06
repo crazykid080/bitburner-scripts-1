@@ -12,7 +12,7 @@ const ramSizes = {
   'weaken.js' : 1.75,
   'grow.js'   : 1.75,
 }
-const reservedRam = 60
+const reservedRam = 100
 const bufferTime = 20 //ms
 const hackDecimal = 0.6
 const weakenAnlz = 0.05
@@ -86,15 +86,16 @@ async function targetServer(ns, target, nmap) {
  * @param {integer} rand - random input, allow a server to have multiple duplicate running simultaneously
  **/
 async function findThreadsAndRun(ns, nmap, file, numThreads, target, wait = 0, rand = 0) {
-  let availableRam, availableThreads, threadsToRun, server
+  let availableRam, availableThreads, threadsToRun, server, reserved
 
   for ( const sn in nmap ) {
     server = ns.getServer(sn)
-    if ( server.maxRam - server.ramUsed < ramSizes[file] ||
-      (sn == 'home' && (server.maxRam - server.ramUsed - reservedRam) < ramSizes[file]) ) {
+    reserved = server.hostname == 'home' ? reservedRam : 0
+    if ( server.maxRam - server.ramUsed < ramSizes[file] + reserved ||
+      !nmap[sn].files.includes(file) ) {
       continue
     }
-    availableRam = server.maxRam - server.ramUsed
+    availableRam = server.maxRam - server.ramUsed - reserved
     availableThreads = Math.floor(availableRam/ramSizes[file])
     threadsToRun = Math.min(availableThreads, numThreads)
     numThreads -= threadsToRun
@@ -119,7 +120,7 @@ async function hackInfo(ns, target) {
   const player = fetchPlayer()
   const time = ns.getHackTime(target.name) + bufferTime*2
   const amountToHack = target.data.moneyAvailable * hackDecimal
-  const threads = Math.floor(hackDecimal/ns.hackAnalyzeThreads(target.name))
+  const threads = Math.floor(hackDecimal/ns.hackAnalyze(target.name))
   const security = serverFortifyAmount * threads
   target.security += security
   ns.print(`Hack time: ${formatDuration(time)} amountToHack: ${formatMoney(amountToHack)} `+
@@ -134,11 +135,11 @@ async function hackInfo(ns, target) {
  **/
 async function growthInfo(ns, target, amountHacked) {
   const player = fetchPlayer()
-  let time = ns.getGrowTime(target.data, player) + bufferTime
+  let time = ns.getGrowTime(target.name,) + bufferTime
 
   let multiplier = target.maxMoney/(Math.max(1.1, target.data.moneyAvailable - amountHacked))
   multiplier = Math.min(multiplier, 100)
-  let threads = Math.ceil(multiplier/ns.growthAnalyze(target.name, 1))
+  let threads = Math.ceil(multiplier/ns.growthAnalyze(target.name, multiplier))
   let security = 2 * serverFortifyAmount * threads
   target.security += security
   ns.print(`Need to grow ${target.name} by ${formatNumber(multiplier * 100)}%, ${threads} threads, Grow time: ${formatDuration(time)}, security: ${security}`)
