@@ -14,7 +14,7 @@ const ramSizes = {
 }
 const reservedRam = 100
 const bufferTime = 20 //ms
-const hackDecimal = 0.6
+const hackDecimal = 0.05
 const weakenAnlz = 0.05
 const serverFortifyAmount = 0.002
 
@@ -56,7 +56,8 @@ export async function main(ns) {
  * @param {object} nmap - network map of all servers
  **/
 async function targetServer(ns, target, nmap) {
-  ns.print(`${formatNumber(target.security)} security, ${formatMoney(target.data.moneyAvailable)}`)
+  ns.print(`Security: ${formatNumber(target.security)}/${formatNumber(target.minSecurity)} ----- ` +
+    `Money: ${formatMoney(target.data.moneyAvailable)}/${formatMoney(target.maxMoney)}`)
   let [hackThreads, hackTime, hackedMoney] = await hackInfo(ns, target)
   if (hackThreads == -1) return
   let [growThreads, growTime] = await growthInfo(ns, target, hackedMoney )
@@ -139,7 +140,10 @@ async function growthInfo(ns, target, amountHacked) {
 
   let multiplier = target.maxMoney/(Math.max(1.1, target.data.moneyAvailable - amountHacked))
   multiplier = Math.min(multiplier, 100)
-  let threads = Math.ceil(multiplier/ns.growthAnalyze(target.name, multiplier))
+  let threads = Math.ceil(multiplier/(ns.growthAnalyze(target.name, multiplier)))
+  if(ns.ls("home", "\.exe").includes("Formulas.exe")){
+    threads = Math.ceil((multiplier-1)/(ns.growthAnalyze(target.name, multiplier)-1))
+  }
   let security = 2 * serverFortifyAmount * threads
   target.security += security
   ns.print(`Need to grow ${target.name} by ${formatNumber(multiplier * 100)}%, ${threads} threads, Grow time: ${formatDuration(time)}, security: ${security}`)
