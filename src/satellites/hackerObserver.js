@@ -13,6 +13,8 @@ const ramSizes = {
   'grow.js'   : 1.75,
 }
 
+const hasFormulas = false
+
 // Configuration. Change these as desired.
 const reservedRam = 40
 const bufferTime = 30 //ms
@@ -68,11 +70,19 @@ export async function main(ns) {
  **/
 function report(ns, targets) {
   for (const target of targets.slice(0, 5) ) {
-    ns.print(`${target.name.padEnd(10)} / ` +
-      `Security: ${formatNumber(target.security).padStart(5)}/${formatNumber(target.minSecurity).padEnd(5)} / ` +
-      `Money: ${formatMoney(target.data.moneyAvailable).padStart(9)}/${formatMoney(target.maxMoney).padEnd(9)} / ` +
-      `Weak time: ${formatDuration(ns.formulas.hacking.weakTime(target.data, fetchPlayer()))}`
-    )
+    if(hasFormulas){
+      ns.print(`${target.name.padEnd(10)} / ` +
+        `Security: ${formatNumber(target.security).padStart(5)}/${formatNumber(target.minSecurity).padEnd(5)} / ` +
+        `Money: ${formatMoney(target.data.moneyAvailable).padStart(9)}/${formatMoney(target.maxMoney).padEnd(9)} / ` +
+        `Weak time: ${formatDuration(ns.formulas.hacking.weakTime(target.data, fetchPlayer()))}`
+      )
+    } else {
+      ns.print(`${target.name.padEnd(10)} / ` +
+        `Security: ${formatNumber(target.security).padStart(5)}/${formatNumber(target.minSecurity).padEnd(5)} / ` +
+        `Money: ${formatMoney(target.data.moneyAvailable).padStart(9)}/${formatMoney(target.maxMoney).padEnd(9)} / ` +
+        `Weak time: ${formatDuration(ns.getWeakenTime(target.name))}`
+      )
+    }
   }
 }
 
@@ -198,7 +208,7 @@ class Targeter {
 
   }
 
-  hackTime() { return this.ns.formulas.hacking.hackTime(this.target.data, fetchPlayer())}
+  hackTime() { return this.ns.getHackTime(this.target.name)}
   growTime() { return this.hackTime() * growTimeMultiplier }
   weakTime() { return this.hackTime() * weakenTimeMultiplier }
 
@@ -209,7 +219,11 @@ class Targeter {
     const formulas = this.ns.formulas.hacking
     const server = this.target.data
     const amountToHack = server.moneyAvailable * hackDecimal
-    const threads = Math.floor(hackDecimal/formulas.hackPercent(server, player))
+    if(hasFormulas){
+      const threads = Math.floor(hackDecimal/formulas.hackPercent(server, player))
+    } else {
+      const threads = Math.floor(hackDecimal/this.ns.hackAnalyze(server, player))
+    }
 
     this.ns.print(`Hack   : ${formatMoney(amountToHack)} / threads: ${threads} / ` +
       `remaining: ${formatMoney(server.moneyAvailable - amountToHack)} / ` +
@@ -223,7 +237,11 @@ class Targeter {
     const formulas = this.ns.formulas.hacking
 
     let multiplier = server.moneyMax/(Math.max(1, server.moneyMax - replacing))
-    let threads = Math.ceil((multiplier-1)/(formulas.growPercent(server, 1, player)-1))
+    if(hasFormulas){
+      let threads = Math.ceil((multiplier-1)/(formulas.growPercent(server, 1, player)-1))
+    } else {
+      let threads = Math.ceil(multiplier/(ns.growthAnalyze(target.name, multiplier)))
+    }
     let security = 2 * serverFortifyAmount * threads
     this.ns.print(`Grow   : ${formatNumber(multiplier * 100)}% ` +
       `(${formatMoney(replacing)}) / ` +
