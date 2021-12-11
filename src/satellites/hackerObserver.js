@@ -219,10 +219,15 @@ class Targeter {
     const formulas = this.ns.formulas.hacking
     const server = this.target.data
     const amountToHack = server.moneyAvailable * hackDecimal
+    let threads = -1
     if(hasFormulas){
-      const threads = Math.floor(hackDecimal/formulas.hackPercent(server, player))
+      threads = Math.floor(hackDecimal/formulas.hackPercent(server, player))
     } else {
-      const threads = Math.floor(hackDecimal/this.ns.hackAnalyze(server, player))
+      threads = Math.floor(hackDecimal/this.ns.hackAnalyze(this.target.name, player))
+    }
+
+    if(threads == -1){
+      this.ns.tprint("ERROR: Threads was not allocated properly. HOW THOUGH!? (hackInfo)")
     }
 
     this.ns.print(`Hack   : ${formatMoney(amountToHack)} / threads: ${threads} / ` +
@@ -237,10 +242,14 @@ class Targeter {
     const formulas = this.ns.formulas.hacking
 
     let multiplier = server.moneyMax/(Math.max(1, server.moneyMax - replacing))
+    let threads = -1
     if(hasFormulas){
-      let threads = Math.ceil((multiplier-1)/(formulas.growPercent(server, 1, player)-1))
+      threads = Math.ceil((multiplier-1)/(formulas.growPercent(server, 1, player)-1))
     } else {
-      let threads = Math.ceil(multiplier/(ns.growthAnalyze(target.name, multiplier)))
+      threads = Math.ceil(multiplier/(this.ns.growthAnalyze(this.target.name, multiplier)))
+    }
+    if(threads == -1){
+      this.ns.print("ERROR: Something went wrong with thread allocation. HOW THOUGH!?")
     }
     let security = 2 * serverFortifyAmount * threads
     this.ns.print(`Grow   : ${formatNumber(multiplier * 100)}% ` +
