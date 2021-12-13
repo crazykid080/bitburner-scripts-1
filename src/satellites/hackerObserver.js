@@ -1,6 +1,7 @@
 import {
   disableLogs,
   fetchPlayer,
+  getLSItem, setLSItem,
   formatDuration, formatNumber, formatMoney,
 } from 'helpers.js'
 import { networkMap, fetchServer } from 'network.js'
@@ -12,8 +13,6 @@ const ramSizes = {
   'weaken.js' : 1.75,
   'grow.js'   : 1.75,
 }
-
-const hasFormulas = false
 
 // Configuration. Change these as desired.
 const reservedRam = 750
@@ -27,6 +26,8 @@ const serverFortifyAmount = 0.002
 const growTimeMultiplier = 3.2 // Relative to hacking time. 16/5 = 3.2
 const weakenTimeMultiplier = 4 // Relative to hacking time
 
+let reporter; // bad global, bad!
+
 /**
  * @param {NS} ns
  **/
@@ -35,10 +36,13 @@ export async function main(ns) {
   let nmap, player, searcher, targets
   const processManager = new ProcessManager()
 
+  if ((typeof getLSItem('hackpercent')) != 'number') setLSItem('hackpercent', hackDecimal)
+
   while(true) {
     nmap = await networkMap(ns)
     player = fetchPlayer()
     processManager.cleanup(ns)
+    reporter = new Report()
     searcher = new BestHack(nmap)
     targets = searcher.findTop(ns, player)
     if ( targets.some(s => s.name === 'joesguns') && targets[0].name != 'joesguns' ) {
@@ -59,36 +63,92 @@ export async function main(ns) {
         throw err
       }
     }
-    report(ns, targets)
+    ns.print(reporter.output(ns, targets, processManager))
     await ns.sleep(sleepTime)
   }
 }
 
-/**
- * @param {NS} ns
- * @param {object[]} targets
- **/
-function report(ns, targets) {
-  const top = targets.slice(0, 5)
-  const nameLength = Math.max(... top.map(t => t.name.length))
-  for (const target of targets.slice(0, 5) ) {
-    if(hasFormulas){
-      ns.print(`${target.name.padEnd(nameLength)} / ` +
-      `Security: ${formatNumber(target.security).padStart(5)}/` +
-      `${formatNumber(target.minSecurity).padEnd(5)} / ` +
-      `Money: ${formatMoney(target.data.moneyAvailable).padStart(9)}/` +
-      `${formatMoney(target.maxMoney).padEnd(9)} / ` +
-      `Weak time: ${formatDuration(ns.formulas.hacking.weakenTime(target.data, fetchPlayer()))}`
-    )
-    } else {
-      ns.print(`${target.name.padEnd(nameLength)} / ` +
-      `Security: ${formatNumber(target.security).padStart(5)}/` +
-      `${formatNumber(target.minSecurity).padEnd(5)} / ` +
-      `Money: ${formatMoney(target.data.moneyAvailable).padStart(9)}/` +
-      `${formatMoney(target.maxMoney).padEnd(9)} / ` +
-      `Weak time: ${formatDuration(ns.getWeakenTime(target.name))}`
-    )
+function hasFormulas(ns){
+  return (ns.ls("home", "\.exe").includes("Formulas.exe"))
+}
+
+function recordActivity(type, threads) {
+  reporter.record(type, threads)
+}
+
+class Report {
+  constructor() {
+    this.activity = { 
+      w: { type: 'w', threads: 0, servers: 0 },
+      g: { type: 'g', threads: 0, servers: 0 }, 
+      h: { type: 'h', threads: 0, servers: 0 },
     }
+  }
+  record(type, threads) {
+    type = type[0]
+    this.activity[type].threads += threads
+    this.activity[type].servers += 1
+  }
+  output(ns, servers, processManager) {
+    let str = 'SUCCESS: ---------- '
+    str += this.processSummary(processManager)
+    str += this.activitySummary()
+    str += this.serverSummary(ns, servers)
+    return str
+  }
+  // N.B.: The threads listed here and in activitySummary are the PRIMARY 
+  // ACTIVITY threads. IE, if the script is weakening the server because 
+  // security is too high, those threads will be counted; if the script is 
+  // weakening the server because it is running an associated grow or hack, 
+  // those weak threads are not counted (only the grow or hack threads).
+  processSummary(processManager) {
+    let str = '\n\r Ongoing:   '
+    const summaryData = processManager.summaryData()
+    const total = summaryData.reduce((t, a) => { return t + a.threads}, 0)
+    str += `${total.toString().padStart(6)} total `
+    summaryData.forEach(d => 
+      str += `${d.threads.toString().padStart(5)}${d.type} threads ` +
+        `(${d.servers.toString().padStart(2)} servers) `
+    )
+    return str 
+  }
+
+  activitySummary() {
+    let str = '\n\r This cycle:'
+    const activity = Object.values(this.activity)
+    const totalThreads = activity.reduce((t, a) => { return t + a.threads }, 0)
+    str += `${totalThreads.toString().padStart(6)} total `
+    activity.forEach( a => 
+      str += `${a.threads.toString().padStart(5)}${a.type} threads ` +
+        `(${a.servers.toString().padStart(2)} servers) `
+    )
+    return str
+  }
+
+  serverSummary(ns, servers) {
+    let str = '\n\r ---------- Top targets ----------------'
+    const top = servers.slice(0,5)
+    const nameLength = Math.max(... top.map(t => t.name.length))
+    str += `\n\r ` + `Name`.padEnd(nameLength) 
+    str += ` |  Sec/min    |  Money/max          | wTime `
+    for (const server of top ) {
+      if(hasFormulas(ns)){
+        str += `\n\r ${server.name.padEnd(nameLength)} | ` +
+          `${formatNumber(server.security).padStart(5)}/` +
+          `${formatNumber(server.minSecurity).padEnd(5)} | ` +
+          `${formatMoney(server.data.moneyAvailable).padStart(9)}/` +
+          `${formatMoney(server.maxMoney).padEnd(9)} | ` +
+          `${formatDuration(ns.formulas.hacking.weakenTime(server.data, fetchPlayer()))}`
+      } else {
+        str += `\n\r ${server.name.padEnd(nameLength)} | ` +
+          `${formatNumber(server.security).padStart(5)}/` +
+          `${formatNumber(server.minSecurity).padEnd(5)} | ` +
+          `${formatMoney(server.data.moneyAvailable).padStart(9)}/` +
+          `${formatMoney(server.maxMoney).padEnd(9)} | ` +
+          `${formatDuration(ns.getWeakenTime(server.name))}`
+      }
+    }
+    return str 
   }
 }
 
@@ -187,20 +247,20 @@ class Targeter {
   findRamAndLaunch(minerManagers, fileType) {
     const ramFinder = new RamFinder(this.ns, this.nmap)
     const [managers, outOfRam] = ramFinder.findMiners(minerManagers)
+    const rand = Date.now()
 
-    managers.forEach(manager => {this.launchMiners(manager, fileType)}, this)
+    managers.forEach(manager => this.launchMiners(manager, fileType, rand))
     if ( outOfRam ) {
       throw new OutOfRamException(`Out of ram, targeting ${this.target.name} ` +
         `while trying to run ${fileType}.`)
     }
   }
 
-  launchMiners(minerManager, record) {
+  launchMiners(minerManager, type, rand) {
     const file = minerManager.type
     const wait = minerManager.delay
-    const rand = Date.now()
+    const record = type == minerManager.type
     let pid
-    record = record == minerManager.type
 
     for ( const miner of minerManager.miners ) {
       this.ns.print(`ns.exec('${file}', '${miner.name}', ${miner.threads}, ` +
@@ -210,11 +270,16 @@ class Targeter {
         this.processManager.addProcess(pid, miner.threads, this.target.name, file)
       }
     }
-
-
+    if (record) recordActivity(file, minerManager.totalThreads)
   }
 
-  hackTime() { return this.ns.getHackTime(this.target.name)}
+  hackTime() {
+    if(hasFormulas(this.ns)){
+      return this.ns.formulas.hacking.hackTime(this.target.data, fetchPlayer())
+    } else{
+      return this.ns.getHackTime(this.target.name)
+    }
+  }
   growTime() { return this.hackTime() * growTimeMultiplier }
   weakTime() { return this.hackTime() * weakenTimeMultiplier }
 
@@ -222,20 +287,19 @@ class Targeter {
     if ( this.target.data.moneyAvailable/this.target.maxMoney < 0.1) return [0,0,0]
 
     const player = fetchPlayer()
-    const formulas = this.ns.formulas.hacking
+    let formulas = null
+    if(hasFormulas(this.ns)){
+      formulas = this.ns.formulas.hacking
+    }
     const server = this.target.data
-    const amountToHack = server.moneyAvailable * hackDecimal
+    const decimal = getLSItem('hackpercent')
+    const amountToHack = server.moneyAvailable * decimal
     let threads = -1
-    if(hasFormulas){
-      threads = Math.floor(hackDecimal/formulas.hackPercent(server, player))
+    if(hasFormulas(this.ns)){
+      threads = Math.floor(decimal/formulas.hackPercent(server, player))
     } else {
-      threads = Math.floor(hackDecimal/this.ns.hackAnalyze(this.target.name, player))
+      threads = Math.floor(decimal/this.ns.hackAnalyze(this.target.name))
     }
-
-    if(threads == -1){
-      this.ns.tprint("ERROR: Threads was not allocated properly. HOW THOUGH!? (hackInfo)")
-    }
-
     this.ns.print(`Hack   : ${formatMoney(amountToHack)} / threads: ${threads} / ` +
       `remaining: ${formatMoney(server.moneyAvailable - amountToHack)} / ` +
       `security: ${formatNumber(serverFortifyAmount*threads)}`)
@@ -245,17 +309,20 @@ class Targeter {
   growthInfo(replacing) {
     const player = fetchPlayer()
     const server = this.target.data
-    const formulas = this.ns.formulas.hacking
-
+    let formulas = null
+    if(hasFormulas(this.ns)){
+      const formulas = this.ns.formulas.hacking
+    }
+    
     let multiplier = server.moneyMax/(Math.max(1, server.moneyMax - replacing))
     let threads = -1
-    if(hasFormulas){
+    if(formulas != null){
       threads = Math.ceil((multiplier-1)/(formulas.growPercent(server, 1, player)-1))
     } else {
-      threads = Math.ceil(multiplier/(this.ns.growthAnalyze(this.target.name, multiplier)))
+      threads = Math.ceil(multiplier/this.ns.growthAnalyze(this.target.name, 1+multiplier))
     }
     if(threads == -1){
-      this.ns.print("ERROR: Something went wrong with thread allocation. HOW THOUGH!?")
+      this.ns.tprint("ERROR: Why is threads -1? (growthInfo)")
     }
     let security = 2 * serverFortifyAmount * threads
     this.ns.print(`Grow   : ${formatNumber(multiplier * 100)}% ` +
@@ -288,7 +355,8 @@ class RamFinder {
       try { server = this.ns.getServer(sn) } catch { continue }
       reserved = sn == 'home' ? reservedRam : 0
       if ( server.maxRam - server.ramUsed < largestFile + reserved ||
-        !this.nmap[sn].files.includes('weaken.js') ) {
+        !this.nmap[sn].files.includes('weaken.js') ||
+        getLSItem('decommissioned') == sn ) {
         continue
       }
       availableRam = server.maxRam - server.ramUsed - reserved
@@ -335,7 +403,6 @@ class RamFinder {
       }
     }
 
-    this.ns.print(`INFO: Not enough ram to run ${file}, additional threads needed: ${numThreads}`)
     return manager
   }
 
@@ -404,6 +471,21 @@ class ProcessManager {
   }
   addProcess(pid, threads, target, type) {
     this.threadList.push(new Process(pid, threads, target, type))
+  }
+  summaryData() {
+    const summary = { 
+      'weaken.js': { type: 'w', threads: 0, servers: 0, serverNames: []}, 
+      'grow.js':   { type: 'g', threads: 0, servers: 0, serverNames: []}, 
+      'hack.js':   { type: 'h', threads: 0, servers: 0, serverNames: []},
+    }
+    this.threadList.forEach(p => {
+      summary[p.type].threads += p.threads
+      if (!summary[p.type].serverNames.includes(p.target)) {
+        summary[p.type].servers++
+        summary[p.type].serverNames.push(p.target)
+      }
+    })
+    return Object.values(summary)
   }
 }
 
