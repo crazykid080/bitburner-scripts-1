@@ -1,5 +1,4 @@
 import { findPath } from 'network.js'
-import { factionServers } from 'constants.js'
 import { announce } from 'helpers.js'
 
 /** @param {NS} ns **/
@@ -24,4 +23,5 @@ export async function backdoor(ns, target) {
   await ns.installBackdoor()
   announce(ns, `Backdoor installed on ${target}`)
   ns.connect('home')
+  if ( target == 'w0r1d_d43m0n') ns.killall('home')
 }

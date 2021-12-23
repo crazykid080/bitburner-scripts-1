@@ -173,7 +173,8 @@ export async function main(ns) {
   }
 
   // Get some factions augmentations to decide what remains to be purchased
-  const ownedAugs = await fetch(ns, `ns.getOwnedAugmentations(true)`)
+  const ownedAugs = await fetch(ns, `ns.getOwnedAugmentations(true)`,
+    '/Temp/getOwnedAugmentations.txt')
 
   let cmd = dictCommand(factions, 'ns.getAugmentationsFromFaction(o)')
   const factionAugs = await fetch(ns, cmd, '/Temp/factionAugs.txt')
@@ -352,11 +353,12 @@ const requiredKarmaByFaction = {
 const requiredKillsByFaction = {"Speakers for the Dead": 30, "The Dark Army": 5}
 
 /** @param {NS} ns */
-async function earnFactionInvite(ns, factionName) {
+export async function earnFactionInvite(ns, factionName) {
   const player = ns.getPlayer();
   const joinedFactions = player.factions;
   if (joinedFactions.includes(factionName)) return true;
-  var invitations = await fetch(ns, 'ns.checkFactionInvitations()');
+  var invitations = await fetch(ns, 'ns.checkFactionInvitations()',
+    '/Temp/checkFactionInvitations.txt')
   if (invitations.includes(factionName))
     return await tryJoinFaction(ns, factionName);
 
@@ -411,7 +413,7 @@ async function earnFactionInvite(ns, factionName) {
       // Change the "Silhouette" company config to be whichever company we have the most favor with (rep will increase fastest). Break ties with Rep.
       .sort((a, b) => (Math.round(ns.getCompanyFavor(b)) - Math.round(ns.getCompanyFavor(a))) || (ns.getCompanyRep(b) - ns.getCompanyRep(a)))[0];
     // Super-hack. Kick off an external script that just loops until it joins the faction, since we can't have concurrent ns calls in here.
-    await runCommand(ns, `while(true) { if(ns.joinFaction('${factionName}')) return; else ns.sleep(1000); }`, '/Temp/join-faction-loop.js');
+    await runCommand(ns, `while(true) { if(ns.joinFaction('${factionName}')) return; else await ns.sleep(1000); }`, '/Temp/join-faction-loop.js');
     workedForInvite = await workForMegacorpFactionInvite(ns, factionName, false); // Work until CTO and the external script joins this faction, triggering an exit condition.
   }
 
@@ -428,7 +430,7 @@ async function goToCity(ns, cityName) {
     ns.print(`Already in city ${cityName}`);
     return true;
   }
-  if (await fetch(ns, `ns.travelToCity('${cityName}')`, '/Temp/travel.txt')) {
+  if (await fetch(ns, `ns.travelToCity('${cityName}')`, `/Temp/travel.${cityName[0]}.txt`)) {
     lastActionRestart = Date.now();
     announce(ns, `Travelled to ${cityName}`, 'info');
     return true;
@@ -488,10 +490,11 @@ async function studyForCharisma(ns) {
 
 /** @param {NS} ns */
 export async function waitForFactionInvite(ns, factionName, maxWaitTime = 20000) {
-  ns.print(`Waiting for invite from faction "${factionName}"...`);
-  let waitTime = maxWaitTime;
+  ns.print(`Waiting for invite from faction "${factionName}"...`)
+  let waitTime = maxWaitTime
   do {
-    var invitations = await fetch(ns, 'ns.checkFactionInvitations()');
+    var invitations = await fetch(ns, 'ns.checkFactionInvitations()',
+      '/Temp/checkFactionInvitations.txt')
     var joinedFactions = ns.getPlayer().factions;
     if (!invitations.includes(factionName) && !joinedFactions.includes(factionName))
       await ns.sleep(loopSleepInterval);
@@ -551,7 +554,7 @@ export async function workForSingleFaction(ns, factionName, forceUnlockDonations
     return ns.print(`We are not yet part of faction "${factionName}". Skipping working for faction...`);
 
   if (ns.getPlayer().workRepGained > 0) // If we're currently woing faction work, stop to collect reputation and find out how much is remaining
-    await fetch(ns, `ns.stopAction()`);
+    await fetch(ns, `ns.stopAction()`, '/Temp/stopAction.txt');
   let currentReputation = ns.getFactionRep(factionName);
   // If the best faction aug is within 10% of our current rep, grind
   // all the way to it so we can get it immediately, regardless of our
@@ -570,7 +573,8 @@ export async function workForSingleFaction(ns, factionName, forceUnlockDonations
     `Req: ${favorRepRequired.toLocaleString()}`);
   let lastStatusUpdateTime;
 
-  while ((currentReputation = ns.getFactionRep(factionName)) < factionRepRequired) {
+  currentReputation = ns.getFactionRep(factionName)
+  while (currentReputation < factionRepRequired) {
     const factionWork = await detectBestFactionWork(ns, factionName); // Before each loop - determine what work gives the most rep/second for our current stats
     if (await fetch(ns, `ns.workForFaction('${factionName}', '${factionWork}')`, '/Temp/work-for-faction.txt'))
       lastActionRestart = Date.now();
@@ -578,6 +582,7 @@ export async function workForSingleFaction(ns, factionName, forceUnlockDonations
       announce(ns, `Something went wrong, failed to start working for faction "${factionName}" (Not joined?)`, 'error');
       break;
     }
+    currentReputation = ns.getFactionRep(factionName)
     let status = `Doing '${factionWork}' work for "${factionName}" until ${factionRepRequired.toLocaleString()} rep.`;
     if (lastFactionWorkStatus != status || (Date.now() - lastStatusUpdateTime) > statusUpdateInterval) {
       ns.print((lastFactionWorkStatus = status) + ` Currently at ${Math.round(currentReputation).toLocaleString()}, earning ${(ns.getPlayer().workRepGainRate * 5).toFixed(2)} rep/sec.`);
@@ -601,11 +606,14 @@ export async function workForSingleFaction(ns, factionName, forceUnlockDonations
     // If we explicitly stop working, we immediately get our updated faction rep,
     // otherwise it lags by 1 loop (until after next time we call workForFaction)
     // Note: Actual work rep gained will be subject to early cancellation policy
+
+    currentReputation = ns.getFactionRep(factionName)
     if (currentReputation + ns.getPlayer().workRepGained >= factionRepRequired) {
       // We're close - stop working so our current rep is accurate when we check
       // the while loop condition
-      await fetch(ns, `ns.stopAction()`)
+      await fetch(ns, `ns.stopAction()`, '/Temp/stopAction.txt')
     }
+    currentReputation = ns.getFactionRep(factionName)
   }
   if (currentReputation >= factionRepRequired)
     ns.print(`Attained ${Math.round(currentReputation).toLocaleString()} rep with "${factionName}" (needed ${factionRepRequired.toLocaleString()}).`);
@@ -678,7 +686,7 @@ async function tryBuyReputation(ns) {
   if (ns.getPlayer().money > 100E9) {
     let cmd = 'ns.hacknet.numHashes() + ns.hacknet.spendHashes("Generate ' +
               'Coding Contract") - ns.hacknet.numHashes()'
-    let spentHashes = await fetch(ns, cmd);
+    let spentHashes = await fetch(ns, cmd, '/Temp/hacknet.spendHashes.txt');
     if (spentHashes > 0) {
       announce(ns, `Generated a new coding contract for ` +
         `${formatNumber(Math.round(spentHashes / 100) * 100)} hashes`,
@@ -728,7 +736,8 @@ async function workForMegacorpFactionInvite(ns, factionName, waitForInvite) {
     return false
   }
 
-  var invitations = await fetch(ns, 'ns.checkFactionInvitations()')
+  var invitations = await fetch(ns, 'ns.checkFactionInvitations()',
+    '/Temp/checkFactionInvitations.txt')
   if (invitations.includes(factionName)) {
     return await tryJoinFaction(ns, factionName)
   }
@@ -833,8 +842,11 @@ async function workForMegacorpFactionInvite(ns, factionName, waitForInvite) {
         if (await studyForCharisma(ns))
           working = !(studying = true);
       }
-      if (requiredCha - player.charisma > 10) { // Try to spend hacknet-node hashes on university upgrades while we've got a ways to study to make it go faster
-        if (await fetch(ns, 'ns.hacknet.spendHashes("Improve Studying")')) {
+      // Try to spend hacknet-node hashes on university upgrades while we've got
+      // a ways to study to make it go faster
+      if (requiredCha - player.charisma > 10) {
+        if (await fetch(ns, 'ns.hacknet.spendHashes("Improve Studying")',
+          '/Temp/hacknet.spendHashes.txt')) {
           announce(ns, 'Bought a "Improve Studying" upgrade.', 'success');
           await studyForCharisma(ns); // We must restart studying for the upgrade to take effect.
         }

@@ -75,10 +75,10 @@ export function reserve(ns) {
  * @param {function} callback
  * @cost 0 GB
  */
-export async function tryRun(ns, callback) {
+export async function tryRun(callback) {
   let pid = callback()
   while (pid == 0) {
-    await ns.sleep(30)
+    await mySleep(5)
     pid = callback()
   }
   return pid
@@ -128,7 +128,8 @@ export function fetchPlayer() {
  */
 export function announce(ns, log, toastVariant = 'info') {
   // If an error is caught because the script is killed, ns becomes undefined
-  if (!ns.print || !ns.toast) return;
+  checkNsInstance(ns);
+
   ns.print(`${toastVariant.toUpperCase()}: ${log}`);
   ns.toast(log, toastVariant.toLowerCase());
 }
@@ -351,7 +352,6 @@ export async function runCommand(ns, command, fileName, verbose, ...args) {
 export async function runCommandAndWait(ns, command, fileName, verbose, ...args) {
   checkNsInstance(ns)
   if (!verbose) disableLogs(ns, ['run', 'sleep'])
-  fileName = fileName || `/Temp/${hashCode(command)}-command.js`;
 
   const pid = await runCommand_Custom(ns,ns.run,command,fileName,verbose,...args)
   if (pid === 0) {
@@ -391,8 +391,9 @@ export async function runCommand_Custom(ns, fnRun, command, fileName, verbose, .
     'formatDuration', 'formatRam', 'hashCode',
   ]
   const script =
-    `import { ${helpers.join(', ')} } fr` + `om 'helpers.js';\n\r` +
-    `import { networkMap, fetchServer } fr` + `om 'network.js';\n\r` +
+    // `import { ${helpers.join(', ')} } fr` + `om 'helpers.js';\n` +
+    // `import { networkMap, fetchServer } fr` + `om 'network.js';\n` +
+    // `import * as constants fr` + `om 'constants.js';\n` +
     `export async function main(ns) { try { ` +
     (verbose ? `let output = ${command}; ns.tprint(output)` : command) +
     `; } catch(err) { ns.tprint(String(err)); throw(err); } }`;
@@ -400,7 +401,9 @@ export async function runCommand_Custom(ns, fnRun, command, fileName, verbose, .
   // To improve performance and save on garbage collection, we can skip
   // writing this exact same script was previously written (common for
   // repeatedly-queried data)
-  if (ns.read(fileName) != script) await ns.write(fileName, script, "w")
+  if (ns.read(fileName) != script) {
+    await ns.write(fileName, script, "w")
+  }
   return fnRun(fileName, ...args)
 }
 
