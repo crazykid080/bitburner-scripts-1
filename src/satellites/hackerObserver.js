@@ -334,7 +334,15 @@ class Targeter {
     const formulas = this.ns.formulas.hacking
     const player = fetchPlayer()
     const server = this.target.data
-    const alreadyGrowingBy = formulas.growPercent(server, this.threadCount('grow.js'), player)
+    let alreadyGrowingBy = -1
+    if(hasFormulas(this.ns)){
+      alreadyGrowingBy = formulas.growPercent(server, this.threadCount('grow.js'), player)
+    } else {
+      const growThreads = this.threadCount('grow.js')
+      const numServerGrowthCycles = Math.max(Math.floor(growThreads), 0)
+      const serverGrowPercent = this.target.growth
+      alreadyGrowingBy = Math.pow(serverGrowPercent, numServerGrowthCycles * this.ns.getHackingMultipliers().growth)
+    }
     return this.target.data.moneyAvailable * alreadyGrowingBy
   }
 
