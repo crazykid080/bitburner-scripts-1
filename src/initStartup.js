@@ -68,7 +68,7 @@ const filesToDownload = [
   'weaken.js',
   'workForFactions.js',
 ]
-const baseUrl = 'https://raw.githubusercontent.com/jenheilemann/bitburner-scripts/'
+const baseUrl = 'https://raw.githubusercontent.com/crazykid080/bitburner-scripts-1/'
 
 
 /**
