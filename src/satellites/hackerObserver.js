@@ -156,15 +156,6 @@ class Report {
         `${processManager.runningThreadCount('grow.js', server.name)}`.padStart(7) +
         `${processManager.runningThreadCount('hack.js', server.name)}`.padStart(7)
       }
-      str += `\n\r ${server.name.padEnd(nameLength)} | ` +
-        `${formatNumber(server.security).padStart(5)}/` +
-        `${formatNumber(server.minSecurity).padEnd(5)} | ` +
-        `${formatMoney(server.data.moneyAvailable).padStart(9)}/` +
-        `${formatMoney(server.maxMoney).padEnd(9)} | ` +
-        `${formatDuration(ns.formulas.hacking.weakenTime(server.data, fetchPlayer())).padEnd(7)} | ` +
-        `${processManager.runningThreadCount('weaken.js', server.name)}`.padStart(8) +
-        `${processManager.runningThreadCount('grow.js', server.name)}`.padStart(7) +
-        `${processManager.runningThreadCount('hack.js', server.name)}`.padStart(7)
     }
     return str
   }
@@ -349,7 +340,10 @@ class Targeter {
   }
 
   adjustedMoneyAvailable() {
-    const formulas = this.ns.formulas.hacking
+    let formulas = null
+    if(hasFormulas(this.ns)){
+      formulas = this.ns.formulas.hacking
+    }
     const player = fetchPlayer()
     const server = this.target.data
     let alreadyGrowingBy = -1
